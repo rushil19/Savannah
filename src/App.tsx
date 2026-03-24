@@ -427,14 +427,29 @@ export default function App() {
 
 const submitData = async () => {
     setIsSubmitting(true);
+    
+    // This gathers written text responses that aren't part of the MCQ score
+    const textResponses: Record<string, string> = {};
+    MODULES.forEach(m => {
+      m.questions.forEach(q => {
+        if (q.type === QuestionType.TEXT) {
+          textResponses[q.id] = answers[q.id] || '';
+        }
+      });
+    });
+
     try {
       const scriptURL = import.meta.env.VITE_GOOGLE_APPS_SCRIPT_URL;
       
+      if (!scriptURL) {
+        throw new Error('Submission URL not configured in Vercel');
+      }
+
       const payload = {
         user: userData,
-        answers: answers,
-        textResponses: textResponses,
-        moduleScores: moduleScores,
+        moduleScores,
+        answers,
+        textResponses,
         timestamp: new Date().toISOString()
       };
 
@@ -455,28 +470,31 @@ const submitData = async () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-24 pb-12 px-4">
+    <div className="min-h-screen bg-white font-sans text-gray-900 pt-16">
       <Header />
-      <ProgressBar current={currentModuleIndex} total={MODULES.length} />
-      
-      <main className="max-w-3xl mx-auto">
+      {step !== 'registration' && (
+        <ProgressBar 
+          current={currentModuleIndex + (step === 'final-summary' ? 1 : 0)} 
+          total={MODULES.length} 
+        />
+      )}
+
+      <main className="pb-12">
         <AnimatePresence mode="wait">
           <motion.div
-            key={`${step}-${currentModuleIndex}`}
-            initial={{ opacity: 0, y: 20 }}
+            key={step + (currentModule?.id || '') + currentQuestionIndex}
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
+            exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.3 }}
           >
             {step === 'registration' && (
-              <RegistrationForm 
-                userData={userData}
-                updateUserData={updateUserData}
-                onComplete={() => setStep('module-intro')}
-              />
+              <RegistrationView onRegister={handleRegistration} />
             )}
             {step === 'module-intro' && (
-              <ModuleIntro 
+              <ModuleIntroView 
+                currentModuleIndex={currentModuleIndex}
+                totalModules={MODULES.length}
                 title={currentModule.title}
                 onStart={startModule}
               />
@@ -502,7 +520,7 @@ const submitData = async () => {
               <ResultView 
                 title={currentModule.title}
                 score={moduleScores[currentModule.id] || 0}
-                totalMCQs={currentModule.questions.filter(q => q.type !== 'text').length}
+                totalMCQs={currentModule.questions.filter(q => q.type !== QuestionType.TEXT).length}
                 onNext={nextModule}
                 isLastModule={currentModuleIndex === MODULES.length - 1}
               />
@@ -521,5 +539,3 @@ const submitData = async () => {
     </div>
   );
 }
-
-export default App;
